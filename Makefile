@@ -6,7 +6,7 @@ SRC = src/wire.cpp src/gate.cpp src/gates.cpp src/circuit.cpp
 OBJ = $(SRC:.cpp=.o)
 LIB = libpgates.a
 
-EXAMPLES = examples/basic
+EXAMPLES = examples/basic examples/repl
 TESTS    = tests/truth_tables
 
 .PHONY: all clean test

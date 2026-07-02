@@ -135,10 +135,10 @@ The circuit should settle to a stable state; verify with `wait_for` after settin
 
 ```cpp
 Wire s("s"), r("r"), q("q"), nq("nq");
-NOR g1(s, nq, q);   // Q  = NOR(S, /Q)
-NOR g2(r,  q, nq);  // /Q = NOR(R,  Q)
+NOR g1(r, nq, q);   // Q  = NOR(R, /Q)
+NOR g2(s,  q, nq);  // /Q = NOR(S,  Q)
 Circuit::start();
-s.set(1); s.set(0);  // set latch
+s.set(1); s.set(0);  // set latch (S=1 forces Q=1)
 q.wait_for(1);
 ```
 
