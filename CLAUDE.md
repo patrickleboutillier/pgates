@@ -58,14 +58,17 @@ include/gate.h        Gate base class
 include/gates.h       AND OR NOT NAND NOR XOR (single-wire gates)
 include/bus.h         Bus<N> template (N-bit wire group, N ≤ 64)
 include/buses.h       ANDer ORer NOTer NANDer NORer XORer (bus-level gates)
+include/adder.h       ADD (full adder) + ADDer<N> (N-bit ripple-carry adder)
 include/circuit.h     Circuit singleton (start/stop/run_repl)
 src/util.h            close_all_except, internal only
 src/wire.cpp
 src/gate.cpp
 src/gates.cpp
 src/circuit.cpp
+src/adder.cpp
 tests/truth_tables.cpp  truth-table tests for all 6 single-wire gates
 tests/bus_ops.cpp       truth-table tests for bus gate types
+tests/adder_ops.cpp     truth-table tests for ADD and ADDer<4>
 examples/basic.cpp      AND + NOT demo
 examples/repl.cpp       NOR SR-latch interactive REPL demo
 ```
@@ -165,7 +168,7 @@ Either way, stack-allocated gates in examples should keep working.
 
 ### 4. More standard components
 
-Now that `Bus<N>` exists: HalfAdder, FullAdder, 4-bit ripple-carry adder, D flip-flop,
+`ADD` (full adder) and `ADDer<N>` (N-bit ripple-carry) are in place. Next: D flip-flop,
 8-bit register. These mirror the progression in jcscpu.
 
 ### 5. Propagation timing / tracing (optional)

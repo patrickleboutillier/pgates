@@ -2,12 +2,12 @@ CXX      = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -Iinclude
 AR       = ar
 
-SRC = src/wire.cpp src/gate.cpp src/gates.cpp src/circuit.cpp
+SRC = src/wire.cpp src/gate.cpp src/gates.cpp src/circuit.cpp src/adder.cpp
 OBJ = $(SRC:.cpp=.o)
 LIB = libpgates.a
 
 EXAMPLES = examples/basic examples/repl
-TESTS    = tests/truth_tables tests/bus_ops
+TESTS    = tests/truth_tables tests/bus_ops tests/adder_ops
 
 .PHONY: all clean test
 
