@@ -46,7 +46,7 @@ static void test_2input(
         q.wait_for((uint8_t)r[2]);
         char label[32];
         snprintf(label, sizeof(label), "%s(%d,%d)", name, r[0], r[1]);
-        expect(label, q.get(), (uint8_t)r[2]);
+        expect(label, q.last(), (uint8_t)r[2]);
     }
     Circuit::stop();
 }
@@ -59,11 +59,11 @@ static void test_not() {
 
     // Wire process primes NOT's input with 0; NOT(0)=1 propagates at startup
     out.wait_for(1);
-    expect("NOT(0)", out.get(), 1);
+    expect("NOT(0)", out.last(), 1);
 
     in.set(1);
     out.wait_for(0);
-    expect("NOT(1)", out.get(), 0);
+    expect("NOT(1)", out.last(), 0);
 
     Circuit::stop();
 }

@@ -58,17 +58,24 @@ uint8_t Wire::get() {
 }
 
 void Wire::wait_for(uint8_t target) {
-    if (get() == target) return;
+    for (;;) {
+        if (get() == target) return;  // pipe drained; last/cached value is target
 
-    // Switch to blocking while we wait
-    int flags = fcntl(tap_pipe_[0], F_GETFL);
-    fcntl(tap_pipe_[0], F_SETFL, flags & ~O_NONBLOCK);
-    uint8_t tmp;
-    do {
-        if (read(tap_pipe_[0], &tmp, 1) <= 0) break;
-        cached_val_ = tmp;
-    } while (tmp != target);
-    fcntl(tap_pipe_[0], F_SETFL, flags);
+        int flags = fcntl(tap_pipe_[0], F_GETFL);
+        fcntl(tap_pipe_[0], F_SETFL, flags & ~O_NONBLOCK);
+        uint8_t tmp;
+        do {
+            if (read(tap_pipe_[0], &tmp, 1) <= 0) {
+                fcntl(tap_pipe_[0], F_SETFL, flags);
+                return;
+            }
+            cached_val_ = tmp;
+        } while (tmp != target);
+        fcntl(tap_pipe_[0], F_SETFL, flags);
+        // Saw target in blocking mode; loop back to drain any bytes that
+        // arrived since (deferred glitch from a lagging gate evaluation),
+        // confirming the circuit has fully settled before returning.
+    }
 }
 
 std::set<int> Wire::process_fds() const {

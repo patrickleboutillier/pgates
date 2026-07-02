@@ -19,7 +19,8 @@ public:
 
     // Parent/REPL interface
     void    set(uint8_t val);
-    uint8_t get();
+    uint8_t get();               // non-blocking drain; returns last byte seen
+    uint8_t last() const { return cached_val_; }  // cached value, no pipe read
     void    wait_for(uint8_t target);
 
     const std::string& name() const { return name_; }
