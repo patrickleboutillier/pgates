@@ -7,7 +7,7 @@ OBJ = $(SRC:.cpp=.o)
 LIB = libpgates.a
 
 EXAMPLES = examples/basic examples/repl
-TESTS    = tests/truth_tables
+TESTS    = tests/truth_tables tests/bus_ops
 
 .PHONY: all clean test
 
