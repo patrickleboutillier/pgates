@@ -14,7 +14,8 @@ static void safe_close(int& fd) {
     if (fd >= 0) { close(fd); fd = -1; }
 }
 
-Wire::Wire(std::string name) : name_(std::move(name)) {
+Wire::Wire(std::string name, uint8_t initial_val)
+    : name_(std::move(name)), initial_val_(initial_val) {
     if (pipe(driver_pipe_) < 0 || pipe(tap_pipe_) < 0)
         throw std::runtime_error(std::string("pipe: ") + strerror(errno));
     Circuit::register_wire(this);
@@ -114,9 +115,8 @@ void Wire::start() {
 // Wire process main loop: read one byte from driver, broadcast on change.
 // Sends initial 0 to all listeners so gates evaluate at startup.
 void Wire::run() {
-    uint8_t val = 0;
+    uint8_t val = initial_val_;
 
-    // Prime all connected gates with the initial LOW value
     for (const auto& lp : listener_pipes_)
         write(lp[1], &val, 1);
 

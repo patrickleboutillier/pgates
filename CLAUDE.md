@@ -41,6 +41,10 @@ against deferred glitches from lagging gate evaluations. Tests use `wire.last()`
 (not `wire.get()`) after `wait_for` to read the confirmed cached value without
 opening a new race window.
 
+**Wire initial value.** `Wire(name, initial_val)` lets a wire prime its gate listeners
+with a value other than 0. MEM uses this to start internal wire `wc_` at 1, which
+guarantees the latch powers on storing 0 (matching jcscpu behaviour).
+
 **fd cleanup.** After all forks, `Circuit::start()` calls `close_all_except()` (which
 iterates `/proc/self/fd`) to leave the parent with only tap read-ends and drive
 write-ends for input wires. Each child process does the same immediately after fork,
@@ -59,6 +63,7 @@ include/gates.h       AND OR NOT NAND NOR XOR (single-wire gates)
 include/bus.h         Bus<N> template (N-bit wire group, N ≤ 64)
 include/buses.h       ANDer ORer NOTer NANDer NORer XORer (bus-level gates)
 include/adder.h       ADD (full adder) + ADDer<N> (N-bit ripple-carry adder)
+include/mem.h         MEM (gated D-latch) + MEMer<N> (N-bit memory register)
 include/circuit.h     Circuit singleton (start/stop/run_repl)
 src/util.h            close_all_except, internal only
 src/wire.cpp
@@ -66,9 +71,11 @@ src/gate.cpp
 src/gates.cpp
 src/circuit.cpp
 src/adder.cpp
+src/mem.cpp
 tests/truth_tables.cpp  truth-table tests for all 6 single-wire gates
 tests/bus_ops.cpp       truth-table tests for bus gate types
 tests/adder_ops.cpp     truth-table tests for ADD and ADDer<4>
+tests/mem_ops.cpp       write/hold tests for MEM and MEMer<4>
 examples/basic.cpp      AND + NOT demo
 examples/repl.cpp       NOR SR-latch interactive REPL demo
 ```

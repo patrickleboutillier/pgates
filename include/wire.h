@@ -8,7 +8,7 @@
 
 class Wire {
 public:
-    explicit Wire(std::string name = "");
+    explicit Wire(std::string name = "", uint8_t initial_val = 0);
     ~Wire();
     Wire(const Wire&) = delete;
     Wire& operator=(const Wire&) = delete;
@@ -37,6 +37,7 @@ private:
     void          parent_cleanup(const std::set<int>& parent_keep);
 
     std::string name_;
+    uint8_t     initial_val_ = 0;
 
     // Gate or parent writes to [1]; wire process reads from [0]
     int  driver_pipe_[2]   = {-1, -1};
