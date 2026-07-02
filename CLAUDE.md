@@ -9,7 +9,7 @@ Written in C++17, targets Linux (uses `/proc/self/fd` and `epoll`).
 ## Build
 
 ```
-make          # builds libpgates.a + examples/basic + tests/truth_tables
+make          # builds libpgates.a + examples/basic + examples/repl + tests/truth_tables + tests/bus_ops
 make test     # runs all tests
 make clean
 ```
@@ -30,8 +30,16 @@ all its input pipes simultaneously, re-evaluates on any change, and writes to it
 output wire only when the result changes.
 
 **Tap pipe.** Every wire process also writes to a `tap_pipe` on every value change.
-The parent holds the read end; `Wire::get()` (non-blocking drain) and
-`Wire::wait_for(v)` (blocking) use this for the REPL/test interface.
+The parent holds the read end; `Wire::get()` (non-blocking drain), `Wire::last()`
+(cached, no pipe read), and `Wire::wait_for(v)` (blocking) use this for the
+REPL/test interface.
+
+**`wait_for` stability.** After blocking until `target` is seen, `wait_for` loops
+back and drains the pipe non-blocking, then re-enters blocking if a post-target byte
+arrived. This repeats until the pipe is empty with `cached_val_ == target`, guarding
+against deferred glitches from lagging gate evaluations. Tests use `wire.last()`
+(not `wire.get()`) after `wait_for` to read the confirmed cached value without
+opening a new race window.
 
 **fd cleanup.** After all forks, `Circuit::start()` calls `close_all_except()` (which
 iterates `/proc/self/fd`) to leave the parent with only tap read-ends and drive
@@ -47,32 +55,34 @@ reaps them, then **clears the registry** so a second start/stop cycle works clea
 ```
 include/wire.h        Wire class (public API)
 include/gate.h        Gate base class
-include/gates.h       AND OR NOT NAND NOR XOR
+include/gates.h       AND OR NOT NAND NOR XOR (single-wire gates)
+include/bus.h         Bus<N> template (N-bit wire group, N ≤ 64)
+include/buses.h       ANDer ORer NOTer NANDer NORer XORer (bus-level gates)
 include/circuit.h     Circuit singleton (start/stop/run_repl)
 src/util.h            close_all_except, internal only
 src/wire.cpp
 src/gate.cpp
 src/gates.cpp
 src/circuit.cpp
-tests/truth_tables.cpp  truth-table tests for all 6 gates
+tests/truth_tables.cpp  truth-table tests for all 6 single-wire gates
+tests/bus_ops.cpp       truth-table tests for bus gate types
 examples/basic.cpp      AND + NOT demo
+examples/repl.cpp       NOR SR-latch interactive REPL demo
 ```
 
 ## Known rough edges
 
-- **Gate ownership in tests.** `test_2input()` in the test suite allocates gates with
-  `new` (intentional leak) because a stack-allocated gate would be destroyed before
-  `Circuit::start()`. The right fix is to have `Circuit` take ownership of gates, or
-  introduce a `Simulation` object with value semantics.
-
-- **No assembly/module type yet.** The next major feature.
-
-- **`Circuit::run_repl()` is written but untested interactively.** Should work; test it
-  with a simple SR-latch or adder circuit.
+- **Gate ownership for individual gates.** `test_2input()` in the test suite allocates
+  gates with `new` (intentional leak) because a stack-allocated gate would be destroyed
+  before `Circuit::start()`. Bus gates (`ANDer` etc.) avoid this by owning their gates
+  via `std::unique_ptr`; bus gate objects must outlive `Circuit::stop()`. The right
+  general fix is to have `Circuit` take ownership of gates, or introduce a `Simulation`
+  RAII object.
 
 - **Glitches are real.** Setting two inputs in sequence (not atomically) can produce a
-  brief intermediate output. This is intentional (matches real circuit behaviour) but
-  `wait_for` handles it correctly by draining the tap to the final settled value.
+  brief intermediate output. This is intentional (matches real circuit behaviour).
+  `wait_for` handles it via the stability loop; always use `last()` rather than `get()`
+  immediately after `wait_for` in tests.
 
 ## Process cleanup — current state and remaining gaps
 
@@ -103,7 +113,7 @@ Fix: add an optional timeout parameter:
 bool Wire::wait_for(uint8_t target, int timeout_ms = -1);
 // returns false on timeout
 ```
-Implement with `select()` or `poll()` on `tap_pipe_[0]` with a `timeval`.
+Implement with `poll()` on `tap_pipe_[0]` with a `timeval`.
 
 ## Next steps (in rough priority order)
 
@@ -114,10 +124,11 @@ A class that owns its internal gates and exposes `Wire&` members as ports:
 ```cpp
 class HalfAdder {
 public:
-    Wire &a, &b;      // inputs  — references into internal gates
+    Wire &a, &b;      // inputs  — references into internal wires
     Wire &sum, &carry;
     HalfAdder();
 private:
+    Wire sum_, carry_;
     XOR xor_g;
     AND and_g;
 };
@@ -132,6 +143,7 @@ The challenge: `Wire&` members must bind at construction time, before
 The first real test of the wire-as-process model under a feedback loop.
 Two cross-coupled NOR gates share output wires as each other's inputs.
 The circuit should settle to a stable state; verify with `wait_for` after setting S or R.
+The REPL demo in `examples/repl.cpp` sets this up interactively.
 
 ```cpp
 Wire s("s"), r("r"), q("q"), nq("nq");
@@ -151,17 +163,12 @@ Options:
 
 Either way, stack-allocated gates in examples should keep working.
 
-### 4. REPL smoke test
+### 4. More standard components
 
-Run an interactive REPL on a simple circuit (e.g. AND gate) and exercise all commands:
-`set`, `get *`, `watch`, `list`, `quit`.
-
-### 5. More standard components
-
-Once assemblies work: HalfAdder, FullAdder, 4-bit ripple-carry adder, D flip-flop,
+Now that `Bus<N>` exists: HalfAdder, FullAdder, 4-bit ripple-carry adder, D flip-flop,
 8-bit register. These mirror the progression in jcscpu.
 
-### 6. Propagation timing / tracing (optional)
+### 5. Propagation timing / tracing (optional)
 
 Add timestamps (CLOCK_MONOTONIC) to tap writes so the REPL can show how long signals
 took to propagate through a circuit. Useful for comparing gate-count depth.

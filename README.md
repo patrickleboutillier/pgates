@@ -42,8 +42,8 @@ int main() {
 
     // 4. Drive inputs and observe outputs
     a.set(1); b.set(1);
-    c.wait_for(1);          // blocks until the signal propagates
-    printf("c = %d\n", c.get());
+    c.wait_for(1);          // blocks until the signal propagates and settles
+    printf("c = %d\n", c.last());  // safe: returns value confirmed by wait_for
 
     // 5. Optional interactive monitor
     // Circuit::run_repl();
@@ -68,9 +68,15 @@ Wire w("name");          // named wire (name used by REPL)
 Wire w;                  // anonymous wire
 
 w.set(0);                // drive an input wire (no gate driver allowed)
-uint8_t v = w.get();     // non-blocking: returns latest known value
-w.wait_for(1);           // blocks until wire reaches this value
+uint8_t v = w.get();     // non-blocking drain: returns latest byte seen
+uint8_t v = w.last();    // cached value — safe to call after wait_for, no pipe read
+w.wait_for(1);           // blocks until wire reaches and settles on this value
 ```
+
+`last()` vs `get()`: after `wait_for(v)` returns, `last()` returns `v` without
+touching the pipe. `get()` drains any bytes that have arrived since — if the
+circuit is still in-flight, those bytes may not equal `v`. Prefer `last()` in tests
+and anywhere you read a value immediately after `wait_for`.
 
 ### Gates
 
@@ -86,6 +92,44 @@ All gates take wire references. Every gate is a separate OS process after
 | `NOR(a, b, out)` | 2 | `!(a \| b)` |
 | `XOR(a, b, out)` | 2 | `a ^ b` |
 
+### `Bus<N>`
+
+`Bus<N>` groups N wires and treats them as an N-bit integer (bit 0 = wire[0], MSB =
+wire[N-1]). N must be in [1, 64].
+
+```cpp
+#include "bus.h"
+
+Bus<8> a, b, out;
+
+a.set(0b10110011);       // drive all N wires from an integer
+uint64_t v = a.get();    // non-blocking drain across all wires
+uint64_t v = a.last();   // cached value (safe after wait_for)
+out.wait_for(0b10110011);// block until all N wires settle on the expected bits
+Wire& w = a[i];          // access individual wire by index
+```
+
+### Bus gates
+
+Bus gates apply a single-bit gate to each pair of wires across two buses.
+Include `buses.h` (which includes `bus.h` and `gates.h`).
+
+```cpp
+#include "buses.h"
+
+Bus<4> a, b, out;
+ANDer<4> g(a, b, out);   // out[i] = a[i] & b[i]
+```
+
+| Class | Inputs | Output |
+|-------|--------|--------|
+| `ANDer<N>(a, b, out)` | 2 buses | `out[i] = a[i] & b[i]` |
+| `ORer<N>(a, b, out)` | 2 buses | `out[i] = a[i] \| b[i]` |
+| `NANDer<N>(a, b, out)` | 2 buses | `out[i] = !(a[i] & b[i])` |
+| `NORer<N>(a, b, out)` | 2 buses | `out[i] = !(a[i] \| b[i])` |
+| `XORer<N>(a, b, out)` | 2 buses | `out[i] = a[i] ^ b[i]` |
+| `NOTer<N>(in, out)` | 1 bus | `out[i] = !in[i]` |
+
 ### `Circuit`
 
 ```cpp
@@ -99,13 +143,20 @@ in the same process works cleanly.
 
 ## REPL / monitor
 
-`Circuit::run_repl()` drops into an interactive session:
+`Circuit::run_repl()` drops into an interactive session. Run `examples/repl` for a
+preloaded NOR SR-latch:
+
+```
+make
+./examples/repl
+```
 
 ```
 pgates> list             # show all named wires
 pgates> get *            # read all wire values
-pgates> set a 1          # drive wire 'a' high
-pgates> get c            # read wire 'c'
+pgates> set s 1          # drive wire 's' high
+pgates> set s 0          # release
+pgates> get q            # read wire 'q'
 pgates> watch            # print every value change (Ctrl+C to stop)
 pgates> quit
 ```
@@ -157,5 +208,6 @@ NOT g2(c, d);    // c fans out to g2 automatically
 make test
 ```
 
-Runs `tests/truth_tables` which exercises all 6 gate types against their complete
-truth tables (22 test cases).
+Runs:
+- `tests/truth_tables` — all 6 gate types against their complete truth tables (22 cases)
+- `tests/bus_ops` — ANDer, ORer, NOTer, XORer at 4-bit width (14 cases)
