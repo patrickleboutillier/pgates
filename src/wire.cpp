@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
+#include <poll.h>
 #include <stdexcept>
 #include <signal.h>
 #include <sys/prctl.h>
@@ -15,7 +16,7 @@ static void safe_close(int& fd) {
 }
 
 Wire::Wire(std::string name, uint8_t initial_val)
-    : name_(std::move(name)), initial_val_(initial_val) {
+    : name_(std::move(name)), initial_val_(initial_val), cached_val_(initial_val) {
     if (pipe(driver_pipe_) < 0 || pipe(tap_pipe_) < 0)
         throw std::runtime_error(std::string("pipe: ") + strerror(errno));
     Circuit::register_wire(this);
@@ -60,7 +61,19 @@ uint8_t Wire::get() {
 
 void Wire::wait_for(uint8_t target) {
     for (;;) {
-        if (get() == target) return;  // pipe drained; last/cached value is target
+        if (get() == target) {
+            // Pipe is empty and cached == target.  Before returning, poll
+            // briefly for any bytes still in transit through the gate→wire
+            // pipe chain (the circuit may not have evaluated yet when this
+            // is called right after a set()).  If a byte arrives within the
+            // window we drain it and re-check; if nothing arrives we declare
+            // stable.  Retry on EINTR so signals don't shorten the window.
+            struct pollfd pfd = {tap_pipe_[0], POLLIN, 0};
+            int r;
+            do { r = poll(&pfd, 1, 10); } while (r < 0 && errno == EINTR);
+            if (r <= 0) return;
+            continue;   // bytes arrived; loop back to get() to drain them
+        }
 
         int flags = fcntl(tap_pipe_[0], F_GETFL);
         fcntl(tap_pipe_[0], F_SETFL, flags & ~O_NONBLOCK);
@@ -119,6 +132,7 @@ void Wire::run() {
 
     for (const auto& lp : listener_pipes_)
         write(lp[1], &val, 1);
+    write(tap_pipe_[1], &val, 1);  // prime parent's cached_val_ with the actual initial value
 
     for (;;) {
         uint8_t nv;

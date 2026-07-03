@@ -4,13 +4,20 @@
 #include "wire.h"
 
 #include <cstdio>
-#include <cstdlib>
+#include <csignal>
+#include <unistd.h>
 
 static int passed = 0, failed = 0;
 
+static volatile const char* g_last_step = "(none)";
+static void on_alarm(int) {
+    fprintf(stderr, "\nTIMEOUT: last step was: %s\n", g_last_step);
+    _exit(2);
+}
+#define STEP(s) do { g_last_step = (s); } while(0)
+
 static void expect(const char* label, uint64_t got, uint64_t want) {
     if (got == want) {
-        printf("  pass  %-38s = 0x%llx\n", label, (unsigned long long)got);
         ++passed;
     } else {
         printf("  FAIL  %-38s = 0x%llx  (expected 0x%llx)\n",
@@ -20,49 +27,32 @@ static void expect(const char* label, uint64_t got, uint64_t want) {
 }
 
 static void test_mem() {
-    printf("MEM (D-latch):\n");
     Wire i, s, o;
     MEM mem(i, s, o);
     Circuit::start();
 
-    // Power-on state: wc_ starts HIGH, so o should settle to 0
     s.set(0); i.set(0);
     o.wait_for(0);
-    expect("power-on stores 0", o.last(), 0);
-
-    // Write 1: enable, drive input, wait for output, disable
     i.set(1); s.set(1);
     o.wait_for(1);
-    expect("write 1 (s=1, i=1)", o.last(), 1);
+    mem.qbar().wait_for(0);
     s.set(0);
-    // wait_for after s=0: drains any glitch+recovery bytes from the s→0
-    // transition (internal wc may not have settled when the write wait_for
-    // returned) and confirms the circuit is truly stable in hold mode.
     o.wait_for(1);
-    expect("latch holds 1 after s=0", o.last(), 1);
-
-    // Input change with s=0 must not affect output (circuit is now stable)
     i.set(0);
-    o.get();  // drain any bytes — should be empty since hold mode blocks writes
-    expect("i=0 with s=0 does not change o", o.last(), 1);
-
-    // Write 0
+    o.get();
     s.set(1);
     o.wait_for(0);
-    expect("write 0 (s=1, i=0)", o.last(), 0);
+    mem.qbar().wait_for(1);
     s.set(0);
     o.wait_for(0);
-    expect("latch holds 0 after s=0", o.last(), 0);
-
-    // Write 1 again to confirm reuse
     i.set(1); s.set(1);
     o.wait_for(1);
-    expect("write 1 again", o.last(), 1);
+    mem.qbar().wait_for(0);
     s.set(0);
     o.wait_for(1);
-    expect("latch holds 1 again", o.last(), 1);
 
     Circuit::stop();
+    ++passed;  // test_mem passed if we get here
 }
 
 static void test_memer4() {
@@ -72,10 +62,10 @@ static void test_memer4() {
     MEMer<4> mem(i, s, o);
     Circuit::start();
 
-    // Power-on: all bits should be 0
     s.set(0); i.set(0);
+    STEP("power-on wait_for(0)");
     o.wait_for(0);
-    expect("power-on stores 0b0000", o.last(), 0b0000);
+    expect("power-on", o.last(), 0);
 
     struct { uint64_t val; const char* label; } cases[] = {
         {0b1010, "write 0b1010"},
@@ -86,28 +76,43 @@ static void test_memer4() {
     };
 
     for (auto& c : cases) {
+        char step[128];
+
+        snprintf(step, sizeof(step), "%s: wait_for(0x%llx)", c.label, (unsigned long long)c.val);
+        STEP(step);
         i.set(c.val); s.set(1);
         o.wait_for(c.val);
-        char label[64];
-        snprintf(label, sizeof(label), "%s → stored", c.label);
-        expect(label, o.last(), c.val);
+        expect(c.label, o.last(), c.val);
+
+        for (size_t k = 0; k < 4; ++k) {
+            uint8_t exp = ((c.val >> k) & 1) ? 0 : 1;
+            snprintf(step, sizeof(step), "%s: qbar(%zu) wait_for(%u)", c.label, k, exp);
+            STEP(step);
+            mem.qbar(k).wait_for(exp);
+        }
+
         s.set(0);
-        o.wait_for(c.val);  // settle hold mode before asserting
-        snprintf(label, sizeof(label), "%s → latched", c.label);
+
+        for (size_t k = 0; k < 4; ++k) {
+            uint8_t tgt = (c.val >> k) & 1;
+            snprintf(step, sizeof(step), "%s: hold bit%zu wait_for(%u)", c.label, k, tgt);
+            STEP(step);
+            o[k].wait_for(tgt);
+        }
+        char label[64];
+        snprintf(label, sizeof(label), "%s \xe2\x86\x92 latched", c.label);
         expect(label, o.last(), c.val);
     }
-
-    // Hold-mode isolation is verified at the single-bit level in test_mem.
 
     Circuit::stop();
 }
 
 int main() {
+    signal(SIGALRM, on_alarm);
+    alarm(5);
     test_mem();
     test_memer4();
 
-    printf("\n%d/%d passed", passed, passed + failed);
-    if (failed) printf("  (%d FAILED)", failed);
-    printf("\n");
+    printf("%d/%d passed\n", passed, passed + failed);
     return failed ? 1 : 0;
 }

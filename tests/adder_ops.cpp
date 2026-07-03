@@ -4,7 +4,6 @@
 #include "wire.h"
 
 #include <cstdio>
-#include <cstdlib>
 
 static int passed = 0, failed = 0;
 

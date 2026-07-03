@@ -27,7 +27,11 @@ downstream consumers — exactly like a real wire.
 
 **Gate-as-process.** Each `Gate` forks its own process. It uses `epoll` to block on
 all its input pipes simultaneously, re-evaluates on any change, and writes to its
-output wire only when the result changes.
+output wire only when the result changes. Input fds are set O_NONBLOCK so the gate
+can drain ALL input pipes each wakeup — not just the event-triggering ones. This
+prevents a stale-input race where two inputs update near-simultaneously: the second
+update may already be sitting in its pipe when epoll fires for the first, and without
+draining both the gate evaluates with a stale cached value for the second input.
 
 **Tap pipe.** Every wire process also writes to a `tap_pipe` on every value change.
 The parent holds the read end; `Wire::get()` (non-blocking drain), `Wire::last()`

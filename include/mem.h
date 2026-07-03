@@ -19,6 +19,7 @@
 class MEM {
 public:
     MEM(Wire& i, Wire& s, Wire& o);
+    Wire& qbar() { return wc_; }  // /Q — must be 0 (1) after storing 1 (0)
 private:
     Wire wa_, wb_;
     Wire wc_;              // starts HIGH so o powers on as 0
@@ -35,6 +36,7 @@ public:
         for (size_t k = 0; k < N; ++k)
             cells_.push_back(std::make_unique<MEM>(i[k], s, o[k]));
     }
+    Wire& qbar(size_t k) { return cells_[k]->qbar(); }
 private:
     std::vector<std::unique_ptr<MEM>> cells_;
 };

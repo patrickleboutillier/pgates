@@ -4,7 +4,6 @@
 
 #include <array>
 #include <cstdio>
-#include <cstdlib>
 #include <functional>
 
 // ── Result tracking ───────────────────────────────────────────────────────────
