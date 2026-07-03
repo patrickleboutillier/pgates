@@ -20,6 +20,7 @@ class MEM {
 public:
     MEM(Wire& i, Wire& s, Wire& o);
     Wire& qbar() { return wc_; }  // /Q — must be 0 (1) after storing 1 (0)
+    void settle(uint8_t written_val) { wc_.wait_for(written_val ? 0 : 1); }
 private:
     Wire wa_, wb_;
     Wire wc_;              // starts HIGH so o powers on as 0
@@ -27,16 +28,20 @@ private:
 };
 
 // N-bit memory register: N independent D-latches sharing one set wire.
-// MEMer object must outlive Circuit::stop().
+// BYTE object must outlive Circuit::stop().
 template<size_t N>
-class MEMer {
-    static_assert(N >= 1, "MEMer width must be >= 1");
+class BYTE {
+    static_assert(N >= 1, "BYTE width must be >= 1");
 public:
-    MEMer(Bus<N>& i, Wire& s, Bus<N>& o) {
+    BYTE(Bus<N>& i, Wire& s, Bus<N>& o) {
         for (size_t k = 0; k < N; ++k)
             cells_.push_back(std::make_unique<MEM>(i[k], s, o[k]));
     }
     Wire& qbar(size_t k) { return cells_[k]->qbar(); }
+    void settle(uint64_t written_val) {
+        for (size_t k = 0; k < N; ++k)
+            cells_[k]->settle((written_val >> k) & 1);
+    }
 private:
     std::vector<std::unique_ptr<MEM>> cells_;
 };

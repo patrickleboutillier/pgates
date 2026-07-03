@@ -55,11 +55,11 @@ static void test_mem() {
     ++passed;  // test_mem passed if we get here
 }
 
-static void test_memer4() {
-    printf("MEMer<4>:\n");
+static void test_byte4() {
+    printf("BYTE<4>:\n");
     Bus<4> i, o;
     Wire s;
-    MEMer<4> mem(i, s, o);
+    BYTE<4> mem(i, s, o);
     Circuit::start();
 
     s.set(0); i.set(0);
@@ -84,12 +84,9 @@ static void test_memer4() {
         o.wait_for(c.val);
         expect(c.label, o.last(), c.val);
 
-        for (size_t k = 0; k < 4; ++k) {
-            uint8_t exp = ((c.val >> k) & 1) ? 0 : 1;
-            snprintf(step, sizeof(step), "%s: qbar(%zu) wait_for(%u)", c.label, k, exp);
-            STEP(step);
-            mem.qbar(k).wait_for(exp);
-        }
+        snprintf(step, sizeof(step), "%s: settle", c.label);
+        STEP(step);
+        mem.settle(c.val);
 
         s.set(0);
 
@@ -111,7 +108,7 @@ int main() {
     signal(SIGALRM, on_alarm);
     alarm(5);
     test_mem();
-    test_memer4();
+    test_byte4();
 
     printf("%d/%d passed\n", passed, passed + failed);
     return failed ? 1 : 0;

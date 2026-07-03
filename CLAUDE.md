@@ -67,7 +67,7 @@ include/gates.h       AND OR NOT NAND NOR XOR (single-wire gates)
 include/bus.h         Bus<N> template (N-bit wire group, N ≤ 64)
 include/buses.h       ANDer ORer NOTer NANDer NORer XORer (bus-level gates)
 include/adder.h       ADD (full adder) + ADDer<N> (N-bit ripple-carry adder)
-include/mem.h         MEM (gated D-latch) + MEMer<N> (N-bit memory register)
+include/mem.h         MEM (gated D-latch) + BYTE<N> (N-bit memory register)
 include/circuit.h     Circuit singleton (start/stop/run_repl)
 src/util.h            close_all_except, internal only
 src/wire.cpp
@@ -79,7 +79,7 @@ src/mem.cpp
 tests/truth_tables.cpp  truth-table tests for all 6 single-wire gates
 tests/bus_ops.cpp       truth-table tests for bus gate types
 tests/adder_ops.cpp     truth-table tests for ADD and ADDer<4>
-tests/mem_ops.cpp       write/hold tests for MEM and MEMer<4>
+tests/mem_ops.cpp       write/hold tests for MEM and BYTE<4>
 examples/basic.cpp      AND + NOT demo
 examples/repl.cpp       NOR SR-latch interactive REPL demo
 ```
